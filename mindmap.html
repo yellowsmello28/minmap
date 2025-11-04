@@ -1,0 +1,1152 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mind Map Creator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(to bottom, #d0e8f0, #f8fcff);
+      color: #333;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .container {
+      width: 90%;
+      max-width: 900px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(135, 206, 235, 0.3);
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      margin: 20px 0;
+    }
+    h1 {
+      font-size: 24px;
+      color: #4682b4;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    h2 {
+      font-size: 18px;
+      color: #4682b4;
+      margin-bottom: 10px;
+    }
+    input, select {
+      padding: 8px;
+      border: 1px solid #87ceeb;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+      margin: 5px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+    input[type="text"], input[type="number"], select, input[type="file"] {
+      width: calc(100% - 20px);
+    }
+    input[type="color"], input[type="range"] {
+      width: 40px;
+      height: 28px;
+      padding: 2px;
+    }
+    input[type="range"] {
+      width: 100px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #e6f3ff, #87ceeb 60%, #6bb9e0);
+      color: #2f4f4f;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      margin: 5px;
+      position: relative;
+      box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.15),
+        inset 0 2px 4px rgba(255, 255, 255, 0.9),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+    button:hover {
+      background: linear-gradient(145deg, #f0faff, #a8dffc 60%, #87ceeb);
+      box-shadow: 
+        0 6px 16px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 1),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.05);
+      transform: translateY(-2px) scale(1.02);
+    }
+    button:active {
+      background: linear-gradient(145deg, #cce7ff, #87ceeb 60%, #6bb9e0);
+      box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(0, 0, 0, 0.15),
+        inset 0 -2px 4px rgba(255, 255, 255, 0.8);
+      transform: translateY(0) scale(1);
+    }
+    button svg {
+      margin-right: 6px;
+      fill: #2f4f4f;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 5px;
+      border: 1px solid #87ceeb;
+    }
+    li {
+      padding: 10px;
+      border-bottom: 1px solid #e6f3ff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    li:last-child {
+      border-bottom: none;
+    }
+    li button {
+      background: none;
+      color: #4682b4;
+      text-decoration: underline;
+      padding: 0;
+      margin: 0 10px;
+      box-shadow: none;
+      font-size: 14px;
+      font-weight: normal;
+      text-shadow: none;
+    }
+    li button:hover {
+      color: #5a9bd4;
+      background: none;
+      box-shadow: none;
+      transform: none;
+    }
+    #mindmap {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #87ceeb;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.95);
+      position: relative;
+    }
+    .hidden {
+      display: none;
+    }
+    .info-text {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #shape-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid #87ceeb;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      max-width: 400px;
+    }
+    #editor-modal {
+      position: fixed;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid #87ceeb;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      max-width: 400px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    #shape-modal .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .shape-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      padding: 10px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.8);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      transition: background 0.2s;
+    }
+    .shape-option:hover {
+      background: rgba(135, 206, 235, 0.2);
+    }
+    .shape-option svg {
+      width: 50px;
+      height: 50px;
+      fill: #87ceeb;
+      stroke: #4682b4;
+      stroke-width: 2;
+    }
+    .shape-option span {
+      margin-top: 5px;
+      font-size: 12px;
+      color: #4682b4;
+    }
+    #context-menu {
+      position: fixed;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #87ceeb;
+      border-radius: 5px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      padding: 5px 0;
+    }
+    .context-menu-item {
+      padding: 8px 16px;
+      color: #2f4f4f;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .context-menu-item:hover {
+      background: rgba(135, 206, 235, 0.2);
+    }
+    #editor-modal .editor-field {
+      margin: 10px 0;
+    }
+    #editor-modal label {
+      display: block;
+      color: #4682b4;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+    .editor-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 5px 0;
+    }
+    .editor-row input[type="range"] {
+      width: 100px;
+    }
+    .cyto-node-with-inner-image::before {
+      content: '';
+      position: absolute;
+      width: 50%;
+      height: 50%;
+      top: 25%;
+      left: 25%;
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: 10;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Starter Page -->
+  <div id="starter-page" class="container">
+    <h1>Mind Map Creator</h1>
+    <div>
+      <input id="new-map-name" type="text" placeholder="Enter new mind map name">
+      <button onclick="createNewMindMap()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M8 2v12m-6-6h12"/></svg>
+        Create New
+      </button>
+    </div>
+    <h2>Previous Mind Maps</h2>
+    <ul id="map-list"></ul>
+  </div>
+
+  <!-- Editor Page -->
+  <div id="editor-page" class="hidden container">
+    <h1 id="editor-title"></h1>
+    <div class="toolbar">
+      <input id="node-color" type="color" value="#87ceeb">
+      <button onclick="showShapeModal()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M8 2v12m-6-6h12"/></svg>
+        Add Node
+      </button>
+      <button onclick="saveMindMap()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M2 2h12v12H2zM4 4h8v8H4z"/></svg>
+        Save
+      </button>
+      <button onclick="saveAsMindMap()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M2 2h12v12H2zM4 4h8v8H4z"/></svg>
+        Save As
+      </button>
+      <button onclick="backToStarter()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M10 2L4 8l6 6"/></svg>
+        Back
+      </button>
+    </div>
+    <p class="info-text">Right-click a node to edit (size, border, text style, inner image). Double-click for quick edits. Click two nodes, then click Connect to link them (edge color matches first node's border). Drag nodes to move. Add nodes with optional titles and images in the Add Node modal (image nodes use full size) or add small inner images in the Edit Node modal.</p>
+    <div id="connect-section" class="hidden">
+      <span id="selected-nodes"></span>
+      <button onclick="connectNodes()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M4 8h8m-2 2l2-2l-2-2"/></svg>
+        Connect
+      </button>
+    </div>
+    <div id="mindmap"></div>
+  </div>
+
+  <!-- Shape Selection Modal -->
+  <div id="shape-modal" class="hidden">
+    <h2>Add Node</h2>
+    <input id="modal-node-title" type="text" placeholder="Enter node title (optional)">
+    <input id="modal-node-text" type="text" placeholder="Enter node text (optional)">
+    <h3>Select Shape or Image</h3>
+    <div class="shape-grid">
+      <div class="shape-option" onclick="addNode('rectangle')">
+        <svg viewBox="0 0 100 60"><rect x="10" y="10" width="80" height="40" /></svg>
+        <span>Box</span>
+      </div>
+      <div class="shape-option" onclick="addNode('round-rectangle')">
+        <svg viewBox="0 0 100 60"><rect x="10" y="10" width="80" height="40" rx="10" ry="10" /></svg>
+        <span>Rounded Box</span>
+      </div>
+      <div class="shape-option" onclick="addNode('ellipse')">
+        <svg viewBox="0 0 100 60"><ellipse cx="50" cy="30" rx="40" ry="20" /></svg>
+        <span>Circle</span>
+      </div>
+      <div class="shape-option" onclick="addNode('diamond')">
+        <svg viewBox="0 0 100 60"><polygon points="50,10 90,30 50,50 10,30" /></svg>
+        <span>Diamond</span>
+      </div>
+      <div class="shape-option" onclick="addNode('triangle')">
+        <svg viewBox="0 0 100 60"><polygon points="50,10 90,50 10,50" /></svg>
+        <span>Triangle</span>
+      </div>
+      <div class="shape-option" onclick="triggerImageUpload()">
+        <svg viewBox="0 0 100 60"><rect x="10" y="10" width="80" height="40" /><path d="M30 40l10-10 10 10" fill="none" stroke="#4682b4" stroke-width="4"/></svg>
+        <span>Image</span>
+      </div>
+    </div>
+    <input id="modal-node-image" type="file" accept="image/*" class="hidden" onchange="addNode('image')">
+    <button onclick="document.getElementById('shape-modal').classList.add('hidden')">Cancel</button>
+  </div>
+
+  <!-- Node Editor Modal -->
+  <div id="editor-modal" class="hidden">
+    <h2>Edit Node</h2>
+    <div class="editor-field">
+      <label for="editor-node-title">Title</label>
+      <input id="editor-node-title" type="text" placeholder="Enter node title">
+    </div>
+    <div class="editor-field">
+      <label for="editor-node-text">Text</label>
+      <input id="editor-node-text" type="text" placeholder="Enter node text">
+    </div>
+    <div class="editor-field">
+      <label for="editor-node-width">Width (50-300px)</label>
+      <input id="editor-node-width" type="number" min="50" max="300" placeholder="Enter width">
+    </div>
+    <div class="editor-field">
+      <label for="editor-node-height">Height (50-300px)</label>
+      <input id="editor-node-height" type="number" min="50" max="300" placeholder="Enter height">
+    </div>
+    <div class="editor-field">
+      <label for="editor-node-color">Background Color</label>
+      <input id="editor-node-color" type="color">
+    </div>
+    <div class="editor-field">
+      <label for="editor-node-image">Inner Image</label>
+      <input id="editor-node-image" type="file" accept="image/*">
+      <button onclick="removeNodeImage()">Remove Inner Image</button>
+    </div>
+    <div class="editor-field">
+      <label for="editor-border-color">Border Color</label>
+      <input id="editor-border-color" type="color">
+    </div>
+    <div class="editor-field">
+      <label for="editor-border-width">Border Thickness (1-10px)</label>
+      <input id="editor-border-width" type="range" min="1" max="10" value="2">
+    </div>
+    <div class="editor-field">
+      <label for="editor-text-color">Text Color</label>
+      <input id="editor-text-color" type="color">
+    </div>
+    <div class="editor-field">
+      <label for="editor-font-size">Text Size</label>
+      <select id="editor-font-size">
+        <option value="8">8px</option>
+        <option value="10">10px</option>
+        <option value="12" selected>12px</option>
+        <option value="14">14px</option>
+        <option value="16">16px</option>
+        <option value="18">18px</option>
+      </select>
+    </div>
+    <div class="editor-field">
+      <label for="editor-font-weight">Text Thickness</label>
+      <select id="editor-font-weight">
+        <option value="normal" selected>Normal</option>
+        <option value="bold">Bold</option>
+        <option value="bolder">Bolder</option>
+      </select>
+    </div>
+    <div class="editor-field">
+      <label for="editor-font-italic">Italic Text</label>
+      <input id="editor-font-italic" type="checkbox">
+    </div>
+    <div class="editor-row">
+      <button onclick="saveNodeEdits()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M2 2h12v12H2zM4 4h8v8H4z"/></svg>
+        Save
+      </button>
+      <button onclick="document.getElementById('editor-modal').classList.add('hidden')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="#2f4f4f"><path d="M2 2l12 12m0-12l-12 12"/></svg>
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div id="context-menu" class="hidden">
+    <div class="context-menu-item" onclick="openNodeEditor()">Edit Node</div>
+  </div>
+
+  <script>
+    let currentMapName = null;
+    let cy = null;
+    let selectedNodeIds = [];
+    let nodeCounter = 0;
+    let contextMenuNode = null;
+
+    // Starter Page Functions
+    function loadMapList() {
+      console.log('Loading mind map list');
+      const mapList = document.getElementById('map-list');
+      mapList.innerHTML = '';
+      const maps = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('mindmap_')) {
+          const name = key.replace('mindmap_', '');
+          maps.push(name);
+        }
+      }
+      console.log('Found mind maps:', maps);
+      maps.sort().forEach(name => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span>${name}</span>
+          <div>
+            <button class="open-btn">Open</button>
+            <button class="delete-btn">Delete</button>
+          </div>
+        `;
+        mapList.appendChild(li);
+        const openBtn = li.querySelector('.open-btn');
+        const deleteBtn = li.querySelector('.delete-btn');
+        openBtn.addEventListener('click', () => {
+          console.log('Open button clicked for:', name);
+          openMindMap(name);
+        });
+        deleteBtn.addEventListener('click', () => {
+          console.log('Delete button clicked for:', name);
+          deleteMindMap(name);
+        });
+      });
+      console.log('Mind map list loaded, total maps:', maps.length);
+    }
+
+    function createNewMindMap() {
+      console.log('Creating new mind map');
+      const nameInput = document.getElementById('new-map-name');
+      const name = nameInput.value.trim();
+      if (!name) {
+        alert('Please enter a name for the mind map.');
+        return;
+      }
+      if (localStorage.getItem(`mindmap_${name}`)) {
+        alert('A mind map with this name already exists.');
+        return;
+      }
+      currentMapName = name;
+      selectedNodeIds = [];
+      showEditor();
+      const node = cy.add({
+        group: 'nodes',
+        data: {
+          id: 'node' + (Date.now() + nodeCounter++),
+          label: 'New idea',
+          text: '',
+          shape: 'rectangle',
+          color: document.getElementById('node-color').value,
+          borderColor: '#87ceeb',
+          borderWidth: 2,
+          textColor: '#fff',
+          fontSize: '12',
+          fontWeight: 'normal',
+          fontStyle: 'normal',
+          width: 120,
+          height: 80,
+          image: null,
+          innerImage: null,
+          events: 'yes'
+        },
+        position: { x: 0, y: 0 }
+      });
+      node.ungrabify().grabify().unlock();
+      console.log('New node added:', { id: node.id(), grabbable: node.grabbable(), locked: node.locked(), events: node.data('events') });
+      cy.fit();
+      document.getElementById('editor-title').textContent = `Editing: ${name}`;
+      nameInput.value = '';
+    }
+
+    function openMindMap(name) {
+      console.log('Opening mind map:', name);
+      currentMapName = name;
+      const data = JSON.parse(localStorage.getItem(`mindmap_${name}`));
+      selectedNodeIds = [];
+      showEditor();
+      if (data) {
+        cy.json({ elements: data });
+        cy.nodes().forEach(node => {
+          node.ungrabify().grabify().unlock();
+          node.data('events', 'yes');
+          console.log('Loaded node:', { id: node.id(), grabbable: node.grabbable(), locked: node.locked(), events: node.data('events') });
+        });
+      }
+      cy.fit();
+      document.getElementById('editor-title').textContent = `Editing: ${name}`;
+    }
+
+    function deleteMindMap(name) {
+      console.log('deleteMindMap called with name:', name);
+      if (name === currentMapName) {
+        console.log('Deletion blocked: mind map is currently open:', name);
+        alert('Cannot delete the currently open mind map. Please return to the starter page and try again.');
+        return;
+      }
+      console.log('Showing confirmation for:', name);
+      const confirmed = confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`);
+      if (confirmed) {
+        console.log('User confirmed deletion for:', name);
+        try {
+          const key = `mindmap_${name}`;
+          console.log('Checking if key exists:', key);
+          if (localStorage.getItem(key)) {
+            console.log('Removing key from localStorage:', key);
+            localStorage.removeItem(key);
+            console.log('Mind map deleted successfully:', name);
+            loadMapList();
+            alert(`Mind map "${name}" deleted successfully.`);
+          } else {
+            console.warn('Mind map not found in localStorage:', key);
+            alert(`Mind map "${name}" not found.`);
+          }
+        } catch (error) {
+          console.error('Error during deletion:', name, error);
+          alert(`Failed to delete mind map "${name}". Error: ${error.message}`);
+        }
+      } else {
+        console.log('Deletion canceled by user for:', name);
+      }
+    }
+
+    // Editor Page Functions
+    function showEditor() {
+      console.log('Showing editor');
+      document.getElementById('starter-page').classList.add('hidden');
+      document.getElementById('editor-page').classList.remove('hidden');
+      initNetwork();
+    }
+
+    function backToStarter() {
+      console.log('Returning to starter page');
+      document.getElementById('editor-page').classList.add('hidden');
+      document.getElementById('starter-page').classList.remove('hidden');
+      currentMapName = null;
+      selectedNodeIds = [];
+      updateConnectSection();
+      loadMapList();
+      cy.destroy();
+      cy = null;
+    }
+
+    function initNetwork() {
+      console.log('Initializing network');
+      const container = document.getElementById('mindmap');
+      cy = cytoscape({
+        container,
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'label': 'data(label)',
+              'shape': 'data(shape)',
+              'background-color': 'data(color)',
+              'background-image': 'data(image)',
+              'background-fit': 'contain',
+              'background-image-opacity': function(ele) { return ele.data('image') ? 1 : 0; },
+              'border-color': 'data(borderColor)',
+              'border-width': 'data(borderWidth)',
+              'color': 'data(textColor)',
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'text-wrap': 'wrap',
+              'text-max-width': 'data(width)',
+              'font-family': 'Segoe UI, sans-serif',
+              'font-size': 'data(fontSize)',
+              'font-weight': 'data(fontWeight)',
+              'font-style': 'data(fontStyle)',
+              'padding': '15px',
+              'width': 'data(width)',
+              'height': 'data(height)',
+              'box-shadow': '2px 2px 5px rgba(0, 0, 0, 0.2)',
+              'overlay-opacity': 0,
+              'events': 'yes',
+              'text-events': 'no',
+              'content': function(ele) {
+                const label = ele.data('label') || '';
+                const text = ele.data('text') || '';
+                return text ? `${label}\n${text}` : label;
+              }
+            }
+          },
+          {
+            selector: 'node[innerImage]',
+            style: {
+              'background-image-opacity': function(ele) { return ele.data('image') ? 1 : 0; },
+            },
+            css: {
+              '::before': {
+                'content': '""',
+                'background-image': 'data(innerImage)',
+                'background-size': 'contain',
+                'background-position': 'center',
+                'background-repeat': 'no-repeat',
+                'position': 'absolute',
+                'width': '50%',
+                'height': '50%',
+                'top': '25%',
+                'left': '25%',
+                'z-index': '10',
+                'pointer-events': 'none'
+              }
+            }
+          },
+          {
+            selector: 'edge',
+            style: {
+              'width': 2,
+              'line-color': 'data(edgeColor, #87ceeb)',
+              'target-arrow-color': 'data(edgeColor, #87ceeb)',
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier'
+            }
+          }
+        ],
+        layout: { name: 'preset' },
+        zoom: 1,
+        minZoom: 0.5,
+        maxZoom: 2,
+        userPanningEnabled: true,
+        userZoomingEnabled: true,
+        boxSelectionEnabled: false
+      });
+
+      // Ensure all nodes are interactive
+      cy.nodes().grabify().unlock().forEach(node => {
+        node.data('events', 'yes');
+        console.log('Initialized node:', { id: node.id(), grabbable: node.grabbable(), locked: node.locked(), events: node.data('events') });
+      });
+
+      // Enable dragging
+      cy.nodes().on('free', (evt) => {
+        const node = evt.target;
+        node.position({ x: node.position().x, y: node.position().y });
+        console.log('Node moved:', node.id(), node.position());
+      });
+
+      // Right-click context menu
+      cy.on('cxttap', 'node', (evt) => {
+        console.log('Right-click node:', evt.target.id(), { grabbable: evt.target.grabbable(), locked: evt.target.locked(), events: evt.target.data('events') });
+        contextMenuNode = evt.target;
+        const menu = document.getElementById('context-menu');
+        const pos = evt.renderedPosition;
+        menu.style.left = `${pos.x + container.offsetLeft}px`;
+        menu.style.top = `${pos.y + container.offsetTop}px`;
+        menu.classList.remove('hidden');
+      });
+
+      // Hide context menu on canvas tap
+      cy.on('tap', (evt) => {
+        if (evt.target === cy) {
+          console.log('Canvas tapped, hiding context menu');
+          document.getElementById('context-menu').classList.add('hidden');
+        }
+      });
+
+      // Hide context menu on document click
+      document.addEventListener('click', (evt) => {
+        const menu = document.getElementById('context-menu');
+        if (!menu.contains(evt.target)) {
+          menu.classList.add('hidden');
+          console.log('Document click, hiding context menu');
+        }
+      });
+
+      // Node selection for connection
+      cy.on('tap', 'node', (evt) => {
+        console.log('Tapped node:', evt.target.id(), { grabbable: evt.target.grabbable(), locked: evt.target.locked(), events: evt.target.data('events') });
+        const nodeId = evt.target.id();
+        if (!selectedNodeIds.includes(nodeId)) {
+          selectedNodeIds.push(nodeId);
+          if (selectedNodeIds.length > 2) selectedNodeIds.shift();
+        }
+        updateConnectSection();
+      });
+
+      // Double-click for quick edit
+      cy.on('dblclick', 'node', (evt) => {
+        console.log('Double-click node:', evt.target.id(), { grabbable: evt.target.grabbable(), locked: evt.target.locked(), events: evt.target.data('events') });
+        const node = evt.target;
+        const newLabel = prompt('Edit node title:', node.data('label') || '');
+        const newText = prompt('Edit node text:', node.data('text') || '');
+        const newColor = promptForColor(node.data('color'));
+        if (newLabel !== null || newText !== null || newColor) {
+          node.data({
+            label: newLabel !== null ? newLabel : node.data('label'),
+            text: newText !== null ? newText : (node.data('text') || ''),
+            color: newColor || node.data('color'),
+            events: 'yes'
+          });
+          node.ungrabify().grabify().unlock();
+          console.log('Node updated (double-click):', { id: node.id(), label: newLabel, text: newText, color: newColor });
+        }
+      });
+
+      cy.fit();
+    }
+
+    function promptForColor(currentColor) {
+      console.log('Prompting for color, current:', currentColor);
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.value = currentColor;
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.click();
+      const color = input.value;
+      document.body.removeChild(input);
+      console.log('Selected color:', color);
+      return color;
+    }
+
+    function showShapeModal() {
+      console.log('Showing shape modal');
+      document.getElementById('modal-node-title').value = '';
+      document.getElementById('modal-node-text').value = '';
+      document.getElementById('modal-node-image').value = '';
+      document.getElementById('shape-modal').classList.remove('hidden');
+    }
+
+    function triggerImageUpload() {
+      console.log('Triggering image upload');
+      document.getElementById('modal-node-image').click();
+    }
+
+    function addNode(shape) {
+      console.log('Adding node with shape:', shape);
+      const title = document.getElementById('modal-node-title').value.trim() || '';
+      const text = document.getElementById('modal-node-text').value.trim();
+      const validShapes = ['rectangle', 'round-rectangle', 'ellipse', 'diamond', 'triangle'];
+      const isImage = shape === 'image';
+      const finalShape = isImage ? 'rectangle' : shape;
+      if (!isImage && !validShapes.includes(shape)) {
+        console.error('Invalid shape:', shape);
+        alert('Invalid shape selected.');
+        return;
+      }
+      const id = 'node' + (Date.now() + nodeCounter++);
+      const color = document.getElementById('node-color').value;
+      const position = { x: 50 + (nodeCounter * 10 % 100), y: 50 + (nodeCounter * 10 % 100) };
+
+      const fileInput = document.getElementById('modal-node-image');
+      const file = fileInput.files[0];
+
+      if (isImage && !file) {
+        alert('Please select an image file.');
+        return;
+      }
+
+      if (file) {
+        if (file.size > 1024 * 1024) {
+          alert('Image size exceeds 1MB. Please select a smaller image.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const imageDataUrl = e.target.result;
+          const img = new Image();
+          img.onload = function() {
+            let width = img.naturalWidth;
+            let height = img.naturalHeight;
+            if (width > 300 || height > 300) {
+              const scale = Math.min(300 / width, 300 / height);
+              width = Math.round(width * scale);
+              height = Math.round(height * scale);
+            }
+            width = Math.max(50, width);
+            height = Math.max(50, height);
+            console.log('Image loaded for new node:', { id, size: file.size, width, height });
+            const node = cy.add({
+              group: 'nodes',
+              data: {
+                id,
+                label: title,
+                text,
+                shape: finalShape,
+                color,
+                borderColor: '#87ceeb',
+                borderWidth: 2,
+                textColor: '#fff',
+                fontSize: '12',
+                fontWeight: 'normal',
+                fontStyle: 'normal',
+                width,
+                height,
+                image: imageDataUrl,
+                innerImage: null,
+                events: 'yes'
+              },
+              position
+            });
+            node.ungrabify().grabify().unlock();
+            console.log('Node added:', { id, label: title, text, shape: finalShape, color, position, width, height, image: 'data URL', innerImage: null, grabbable: node.grabbable(), locked: node.locked(), events: node.data('events') });
+            document.getElementById('shape-modal').classList.add('hidden');
+            cy.fit();
+          };
+          img.src = imageDataUrl;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const node = cy.add({
+          group: 'nodes',
+          data: {
+            id,
+            label: title,
+            text,
+            shape: finalShape,
+            color,
+            borderColor: '#87ceeb',
+            borderWidth: 2,
+            textColor: '#fff',
+            fontSize: '12',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            width: 120,
+            height: 80,
+            image: null,
+            innerImage: null,
+            events: 'yes'
+          },
+          position
+        });
+        node.ungrabify().grabify().unlock();
+        console.log('Node added:', { id, label: title, text, shape: finalShape, color, position, width: 120, height: 80, image: null, innerImage: null, grabbable: node.grabbable(), locked: node.locked(), events: node.data('events') });
+        document.getElementById('shape-modal').classList.add('hidden');
+        cy.fit();
+      }
+    }
+
+    function openNodeEditor() {
+      console.log('Opening node editor for node:', contextMenuNode.id(), { grabbable: contextMenuNode.grabbable(), locked: contextMenuNode.locked(), events: contextMenuNode.data('events') });
+      const menu = document.getElementById('context-menu');
+      const modal = document.getElementById('editor-modal');
+      const container = document.getElementById('mindmap');
+      const rect = container.getBoundingClientRect();
+      const clickX = parseFloat(menu.style.left) - rect.left;
+      const clickY = parseFloat(menu.style.top) - rect.top;
+
+      const modalWidth = 400;
+      const modalHeight = 600;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      let left = clickX + rect.left + 20;
+      let top = clickY + rect.top;
+
+      if (left + modalWidth > viewportWidth - 20) {
+        left = clickX + rect.left - modalWidth - 20;
+      }
+      if (left < 20) left = 20;
+      if (top + modalHeight > viewportHeight - 20) {
+        top = viewportHeight - modalHeight - 20;
+      }
+      if (top < 20) top = 20;
+
+      modal.style.left = `${left}px`;
+      modal.style.top = `${top}px`;
+
+      document.getElementById('editor-node-title').value = contextMenuNode.data('label') || '';
+      document.getElementById('editor-node-text').value = contextMenuNode.data('text') || '';
+      document.getElementById('editor-node-width').value = parseInt(contextMenuNode.data('width')) || 120;
+      document.getElementById('editor-node-height').value = parseInt(contextMenuNode.data('height')) || 80;
+      document.getElementById('editor-node-color').value = contextMenuNode.data('color') || '#87ceeb';
+      document.getElementById('editor-node-image').value = '';
+      document.getElementById('editor-border-color').value = contextMenuNode.data('borderColor') || '#87ceeb';
+      document.getElementById('editor-border-width').value = contextMenuNode.data('borderWidth') || 2;
+      document.getElementById('editor-text-color').value = contextMenuNode.data('textColor') || '#fff';
+      document.getElementById('editor-font-size').value = contextMenuNode.data('fontSize') || '12';
+      document.getElementById('editor-font-weight').value = contextMenuNode.data('fontWeight') || 'normal';
+      document.getElementById('editor-font-italic').checked = contextMenuNode.data('fontStyle') === 'italic';
+      menu.classList.add('hidden');
+      modal.classList.remove('hidden');
+      console.log('Editor modal positioned at:', { left, top });
+    }
+
+    function removeNodeImage() {
+      console.log('Removing inner image for node:', contextMenuNode.id());
+      document.getElementById('editor-node-image').value = '';
+      contextMenuNode.data('innerImage', null);
+      console.log('Node inner image removed:', { id: contextMenuNode.id(), innerImage: null });
+    }
+
+    function saveNodeEdits() {
+      console.log('Saving node edits for node:', contextMenuNode.id());
+      const title = document.getElementById('editor-node-title').value.trim();
+      const text = document.getElementById('editor-node-text').value.trim();
+      const width = parseInt(document.getElementById('editor-node-width').value) || 120;
+      const height = parseInt(document.getElementById('editor-node-height').value) || 80;
+      const color = document.getElementById('editor-node-color').value;
+      const borderColor = document.getElementById('editor-border-color').value;
+      const borderWidth = parseInt(document.getElementById('editor-border-width').value);
+      const textColor = document.getElementById('editor-text-color').value;
+      const fontSize = document.getElementById('editor-font-size').value;
+      const fontWeight = document.getElementById('editor-font-weight').value;
+      const fontStyle = document.getElementById('editor-font-italic').checked ? 'italic' : 'normal';
+      const fileInput = document.getElementById('editor-node-image');
+      const file = fileInput.files[0];
+
+      if (!title) {
+        alert('Please enter a node title.');
+        return;
+      }
+      if (width < 50 || width > 300 || height < 50 || height > 300) {
+        alert('Width and height must be between 50 and 300 pixels.');
+        return;
+      }
+
+      if (file) {
+        if (file.size > 1024 * 1024) {
+          alert('Image size exceeds 1MB. Please select a smaller image.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const imageDataUrl = e.target.result;
+          console.log('Inner image loaded for node edit:', { id: contextMenuNode.id(), size: file.size });
+          contextMenuNode.data({
+            label: title,
+            text,
+            width,
+            height,
+            color,
+            image: contextMenuNode.data('image'),
+            innerImage: imageDataUrl,
+            borderColor,
+            borderWidth,
+            textColor,
+            fontSize,
+            fontWeight,
+            fontStyle,
+            events: 'yes'
+          });
+          contextMenuNode.style({ width, height });
+          contextMenuNode.ungrabify().grabify().unlock();
+          document.getElementById('editor-modal').classList.add('hidden');
+          console.log('Node updated (editor):', { 
+            id: contextMenuNode.id(), 
+            label: title, 
+            text, 
+            width, 
+            height, 
+            color, 
+            image: contextMenuNode.data('image'), 
+            innerImage: 'data URL', 
+            borderColor, 
+            borderWidth, 
+            textColor, 
+            fontSize, 
+            fontWeight, 
+            fontStyle,
+            grabbable: contextMenuNode.grabbable(),
+            locked: contextMenuNode.locked(),
+            events: contextMenuNode.data('events')
+          });
+          cy.resize();
+          cy.fit();
+        };
+        reader.readAsDataURL(file);
+      } else {
+        contextMenuNode.data({
+          label: title,
+          text,
+          width,
+          height,
+          color,
+          image: contextMenuNode.data('image'),
+          innerImage: contextMenuNode.data('innerImage'),
+          borderColor,
+          borderWidth,
+          textColor,
+          fontSize,
+          fontWeight,
+          fontStyle,
+          events: 'yes'
+        });
+        contextMenuNode.style({ width, height });
+        contextMenuNode.ungrabify().grabify().unlock();
+        document.getElementById('editor-modal').classList.add('hidden');
+        console.log('Node updated (editor):', { 
+          id: contextMenuNode.id(), 
+          label: title, 
+          text, 
+          width, 
+          height, 
+          color, 
+          image: contextMenuNode.data('image'), 
+          innerImage: contextMenuNode.data('innerImage'), 
+          borderColor, 
+          borderWidth, 
+          textColor, 
+          fontSize, 
+          fontWeight, 
+          fontStyle,
+          grabbable: contextMenuNode.grabbable(),
+          locked: contextMenuNode.locked(),
+          events: contextMenuNode.data('events')
+        });
+        cy.resize();
+        cy.fit();
+      }
+    }
+
+    function updateConnectSection() {
+      console.log('Updating connect section, selected nodes:', selectedNodeIds);
+      const connectSection = document.getElementById('connect-section');
+      const selectedNodesSpan = document.getElementById('selected-nodes');
+      if (selectedNodeIds.length === 0) {
+        connectSection.classList.add('hidden');
+        selectedNodesSpan.textContent = '';
+      } else {
+        connectSection.classList.remove('hidden');
+        const labels = selectedNodeIds.map(id => cy.getElementById(id).data('label') || '(untitled)').join(' -> ');
+        selectedNodesSpan.textContent = `Selected: ${labels}`;
+      }
+    }
+
+    function connectNodes() {
+      console.log('Connecting nodes:', selectedNodeIds);
+      if (selectedNodeIds.length === 2) {
+        const from = selectedNodeIds[0];
+        const to = selectedNodeIds[1];
+        const edgeColor = cy.getElementById(from).data('borderColor') || '#87ceeb';
+        cy.add({
+          group: 'edges',
+          data: { source: from, target: to, edgeColor }
+        });
+        selectedNodeIds = [];
+        updateConnectSection();
+        cy.fit();
+        console.log('Edge added:', { from, to, edgeColor });
+      } else {
+        alert('Please select exactly two nodes to connect.');
+      }
+    }
+
+    function saveMindMap() {
+      console.log('Saving mind map:', currentMapName);
+      if (!currentMapName) {
+        saveAsMindMap();
+        return;
+      }
+      const data = cy.json().elements;
+      localStorage.setItem(`mindmap_${currentMapName}`, JSON.stringify(data));
+      alert('Mind map saved successfully.');
+    }
+
+    function saveAsMindMap() {
+      console.log('Saving as new mind map');
+      const name = prompt('Enter mind map name:');
+      if (name) {
+        if (localStorage.getItem(`mindmap_${name}`)) {
+          alert('A mind map with this name already exists.');
+          return;
+        }
+        currentMapName = name;
+        document.getElementById('editor-title').textContent = `Editing: ${name}`;
+        saveMindMap();
+        loadMapList();
+      }
+    }
+
+    // Initialize starter page
+    loadMapList();
+  </script>
+</body>
+</html>
