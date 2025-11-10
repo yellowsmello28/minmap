@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mind Map Creator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:linear-gradient(to bottom,#d0e8f0,#f8fcff);color:#333;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;position:relative;}
+    .container{width:100%;padding:15px;background:rgba(255,255,255,.8);border:1px solid rgba(135,206,235,.3);border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1),inset 0 1px 0 rgba(255,255,255,.8);backdrop-filter:blur(10px);margin:10px 0;}
+    @media (min-width:768px){.container{padding:20px;margin:20px auto;width:95%;max-width:1200px;}}
+    h1{font-size:22px;color:#4682b4;text-align:center;margin-bottom:15px;position:relative;}@media (min-width:768px){h1{font-size:26px;}}
+    h2{font-size:18px;color:#4682b4;margin:15px 0 8px;}
+    .lang-btn{position:absolute;top:15px;right:15px;padding:10px 16px;border:none;border-radius:12px;background:linear-gradient(145deg,#e6f3ff,#87ceeb 60%,#6bb9e0);color:#2f4f4f;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:all .3s ease;z-index:100;}
+    .lang-btn:hover{background:linear-gradient(145deg,#f0faff,#a8dffc 60%,#87ceeb);transform:translateY(-2px) scale(1.05);}
+    input,select{padding:8px;border:1px solid #87ceeb;border-radius:5px;background:rgba(255,255,255,.9);font-size:14px;margin:5px 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.8);width:100%;}
+    input[type=color],input[type=range]{width:40px;height:28px;}input[type=range]{width:100px;}
+    button{padding:10px 16px;border:none;border-radius:12px;background:linear-gradient(145deg,#e6f3ff,#87ceeb 60%,#6bb9e0);color:#2f4f4f;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin:5px;box-shadow:0 4px 12px rgba(0,0,0,.15),inset 0 2px 4px rgba(255,255,255,.9);transition:all .3s ease;text-shadow:0 1px 0 rgba(255,255,255,.5);}
+    button:hover{background:linear-gradient(145deg,#f0faff,#a8dffc 60%,#87ceeb);box-shadow:0 6px 16px rgba(0,0,0,.2);transform:translateY(-2px) scale(1.02);}
+    button:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+    ul{list-style:none;padding:0;background:rgba(255,255,255,.9);border-radius:5px;border:1px solid #87ceeb;}
+    li{padding:10px;border-bottom:1px solid #e6f3ff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;}
+    li:last-child{border-bottom:none;}
+    li button{background:none;color:#4682b4;text-decoration:underline;padding:0;margin:0 8px;font-size:14px;}
+    li button:hover{color:#5a9bd4;}
+    #mindmap{width:100% !important;height:80vh !important;min-height:400px;border:1px solid #87ceeb;border-radius:5px;background:rgba(255,255,255,.95);position:relative;}
+    .hidden{display:none;}
+    .info-text{font-size:12px;color:#666;margin:10px 0;text-align:center;}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:10px;}
+    .clear-all-btn{background:linear-gradient(145deg,#ffcccc,#ff6666);margin-top:15px;width:100%;}
+    .clear-all-btn:hover{background:linear-gradient(145deg,#ff9999,#ff4d4d);}
+    #init-msg{font-style:italic;color:#666;margin:15px 0;text-align:center;}
+    #shape-modal,#editor-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.9);border:1px solid #87ceeb;border-radius:10px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.1);backdrop-filter:blur(10px);z-index:1000;max-width:90%;width:400px;max-height:90vh;overflow-y:auto;}
+    .shape-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:15px 0;}
+    .shape-option{display:flex;flex-direction:column;align-items:center;cursor:pointer;padding:10px;border-radius:5px;background:rgba(255,255,255,.8);box-shadow:0 1px 3px rgba(0,0,0,.1);transition:background .2s;}
+    .shape-option:hover{background:rgba(135,206,235,.2);}
+    .shape-option svg{width:50px;height:50px;fill:#87ceeb;stroke:#4682b4;stroke-width:2;}
+    .shape-option span{margin-top:5px;font-size:12px;color:#4682b4;}
+    #context-menu{position:fixed;background:rgba(255,255,255,.95);border:1px solid #87ceeb;border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:2000;padding:5px 0;}
+    .context-menu-item{padding:8px 16px;color:#2f4f4f;font-size:14px;cursor:pointer;transition:background .2s;}
+    .context-menu-item:hover{background:rgba(135,206,235,.2);}
+    .editor-field{margin:10px 0;}
+    .editor-field label{display:block;color:#4682b4;font-size:14px;margin-bottom:5px;}
+    .editor-row{display:flex;gap:10px;margin:5px 0;}
+    .dropdown{position:relative;display:inline-block;}
+    .dropdown-content{display:none;position:absolute;background:rgba(255,255,255,.95);border:1px solid #87ceeb;border-radius:5px;min-width:180px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:1000;}
+    .dropdown-content button{display:block;width:100%;text-align:left;padding:10px 16px;border:none;background:none;color:#2f4f4f;font-size:14px;cursor:pointer;}
+    .dropdown-content button:hover{background:rgba(135,206,235,.2);}
+    .dropdown:hover .dropdown-content{display:block;}
+  </style>
+</head>
+<body>
+
+  <div id="starter-page" class="container">
+    <h1 data-t="title">Mind Map Creator</h1>
+    <button id="lang-btn" class="lang-btn"><span class="flag">🇬🇧</span> <span class="lang-text">English</span></button>
+    <div id="init-msg">Initializing database…</div>
+    <div id="controls" class="hidden">
+      <input id="new-map-name" type="text" data-t-placeholder="newMapPlaceholder">
+      <button id="create-new-btn" data-t="createNew">Create New</button>
+    </div>
+    <h2 data-t="previousMaps">Previous Mind Maps</h2>
+    <ul id="map-list"></ul>
+    <button id="clear-all-btn" class="clear-all-btn hidden" data-t="clearAll">Clear All Maps (Delete Everything)</button>
+  </div>
+
+  <div id="editor-page" class="hidden container">
+    <h1 id="editor-title"></h1>
+    <div class="toolbar">
+      <input id="node-color" type="color" value="#87ceeb">
+      <button onclick="showShapeModal()" data-t="addNode">Add Node</button>
+      <button onclick="saveMindMap()" data-t="save">Save</button>
+      <div class="dropdown">
+        <button data-t="export">Export ▼</button>
+        <div class="dropdown-content">
+          <button onclick="exportToJSON()">Save to Computer (JSON)</button>
+          <button onclick="exportToPNG()">Export as PNG</button>
+        </div>
+      </div>
+      <button onclick="backToStarter()" data-t="back">Back</button>
+    </div>
+    <p class="info-text" data-t="infoText">Right-click → edit. Double-click for quick edit. Click two nodes → Connect. Drag to move.</p>
+    <div id="connect-section" class="hidden">
+      <span id="selected-nodes"></span>
+      <button onclick="connectNodes()" data-t="connect">Connect</button>
+    </div>
+    <div id="mindmap"></div>
+  </div>
+
+  <!-- Shape Modal -->
+  <div id="shape-modal" class="hidden">
+    <h2 data-t="addNodeModal">Add Node</h2>
+    <input id="modal-node-title" type="text" data-t-placeholder="nodeTitle">
+    <input id="modal-node-text" type="text" data-t-placeholder="nodeText">
+    <h3 data-t="shapeOrImage">Shape or Image</h3>
+    <div class="shape-grid">
+      <div class="shape-option" onclick="addNode('rectangle')"><svg viewBox="0 0 100 60"><rect x="10" y="10" width="80" height="40"/></svg><span data-t="box">Box</span></div>
+      <div class="shape-option" onclick="addNode('round-rectangle')"><svg viewBox="0 0 100 60"><rect x="10" y="10" width="80" height="40" rx="10" ry="10"/></svg><span data-t="roundedBox">Rounded Box</span></div>
+      <div class="shape-option" onclick="addNode('ellipse')"><svg viewBox="0 0 100 60"><ellipse cx="50" cy="30" rx="40" ry="20"/></svg><span data-t="circle">Circle</span></div>
+      <div class="shape-option" onclick="addNode('diamond')"><svg viewBox="0 0 100 60"><polygon points="50,10 90,30 50,50 10,30"/></svg><span data-t="diamond">Diamond</span></div>
+      <div class="shape-option" onclick="addNode('triangle')"><svg viewBox="0 0 100 60"><polygon points="50,10 90,50 10,50"/></svg><span data-t="triangle">Triangle</span></div>
+      <div class="shape-option" onclick="triggerImageUpload()"><svg viewBox="0 0 100 60"><rect x="10" y="10" width="80" height="40"/><path d="M30 40l10-10 10 10" fill="none" stroke="#4682b4" stroke-width="4"/></svg><span data-t="image">Image</span></div>
+    </div>
+    <input id="modal-node-image" type="file" accept="image/*" class="hidden" onchange="addNode('image')">
+    <button onclick="document.getElementById('shape-modal').classList.add('hidden')" data-t="cancel">Cancel</button>
+  </div>
+
+  <!-- Node Editor Modal -->
+  <div id="editor-modal" class="hidden">
+    <h2 data-t="editNode">Edit Node</h2>
+    <div class="editor-field"><label data-t="titleLabel">Title</label><input id="editor-node-title" type="text"></div>
+    <div class="editor-field"><label data-t="textLabel">Text</label><input id="editor-node-text" type="text"></div>
+    <div class="editor-field"><label data-t="widthLabel">Width (50-300)</label><input id="editor-node-width" type="number" min="50" max="300"></div>
+    <div class="editor-field"><label data-t="heightLabel">Height (50-300)</label><input id="editor-node-height" type="number" min="50" max="300"></div>
+    <div class="editor-field"><label data-t="bgLabel">Background</label><input id="editor-node-color" type="color"></div>
+    <div class="editor-field"><label data-t="innerImageLabel">Inner Image</label><input id="editor-node-image" type="file" accept="image/*"><button onclick="removeNodeImage()" data-t="remove">Remove</button></div>
+    <div class="editor-field"><label data-t="borderColorLabel">Border Color</label><input id="editor-border-color" type="color"></div>
+    <div class="editor-field"><label data-t="borderWidthLabel">Border Thickness</label><input id="editor-border-width" type="range" min="1" max="10" value="2"></div>
+    <div class="editor-field"><label data-t="textColorLabel">Text Color</label><input id="editor-text-color" type="color"></div>
+    <div class="editor-field"><label data-t="fontSizeLabel">Font Size</label>
+      <select id="editor-font-size">
+        <option value="8">8px</option><option value="10">10px</option><option value="12" selected>12px</option>
+        <option value="14">14px</option><option value="16">16px</option><option value="18">18px</option>
+      </select>
+    </div>
+    <div class="editor-field"><label data-t="weightLabel">Weight</label>
+      <select id="editor-font-weight"><option value="normal" selected>Normal</option><option value="bold">Bold</option><option value="bolder">Bolder</option></select>
+    </div>
+    <div class="editor-field"><label data-t="italicLabel">Italic</label><input id="editor-font-italic" type="checkbox"></div>
+    <div class="editor-row">
+      <button onclick="saveNodeEdits()" data-t="save">Save</button>
+      <button onclick="document.getElementById('editor-modal').classList.add('hidden')" data-t="cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div id="context-menu" class="hidden">
+    <div class="context-menu-item" onclick="openNodeEditor()" data-t="editNode">Edit Node</div>
+  </div>
+
+  <script>
+    /* ==================== Translations ==================== */
+    const translations = {
+      en: {title:"Mind Map Creator",newMapPlaceholder:"Enter new mind map name",createNew:"Create New",previousMaps:"Previous Mind Maps",clearAll:"Clear All Maps (Delete Everything)",addNode:"Add Node",save:"Save",export:"Export ▼",back:"Back",infoText:"Right-click → edit. Double-click for quick edit. Click two nodes → Connect. Drag to move.",connect:"Connect",addNodeModal:"Add Node",nodeTitle:"Title (optional)",nodeText:"Text (optional)",shapeOrImage:"Shape or Image",box:"Box",roundedBox:"Rounded Box",circle:"Circle",diamond:"Diamond",triangle:"Triangle",image:"Image",cancel:"Cancel",editNode:"Edit Node",titleLabel:"Title",textLabel:"Text",widthLabel:"Width (50-300)",heightLabel:"Height (50-300)",bgLabel:"Background",innerImageLabel:"Inner Image",borderColorLabel:"Border Color",borderWidthLabel:"Border Thickness",textColorLabel:"Text Color",fontSizeLabel:"Font Size",weightLabel:"Weight",italicLabel:"Italic",remove:"Remove",alertEnterName:"Enter a name.",alertNameExists:"Name already exists.",alertCloseFirst:"Close the map first.",alertDeleteConfirm:"Delete \"%s\" permanently?",alertDeleted:"\"%s\" deleted.",alertAllDeleted:"All data wiped from your computer.",alertSelectImage:"Select an image.",alertImageSize:"Image ≤ 1 MB.",alertSelectTwo:"Select exactly two nodes.",alertSaved:"Saved.",alertNameTaken:"Name taken.",editing:"Editing"},
+      sv: {title:"Tanke-karta Skapare",newMapPlaceholder:"Ange namn på ny tankekarta",createNew:"Skapa ny",previousMaps:"Tidigare tankekartor",clearAll:"Rensa alla kartor (Radera allt)",addNode:"Lägg till nod",save:"Spara",export:"Exportera ▼",back:"Tillbaka",infoText:"Högerklicka → redigera. Dubbelklicka för snabb redigering. Klicka två noder → Koppla. Dra för att flytta.",connect:"Koppla",addNodeModal:"Lägg till nod",nodeTitle:"Titel (valfritt)",nodeText:"Text (valfritt)",shapeOrImage:"Form eller bild",box:"Rektangel",roundedBox:"Rundad rektangel",circle:"Cirkel",diamond:"Diamant",triangle:"Triangel",image:"Bild",cancel:"Avbryt",editNode:"Redigera nod",titleLabel:"Titel",textLabel:"Text",widthLabel:"Bredd (50-300)",heightLabel:"Höjd (50-300)",bgLabel:"Bakgrund",innerImageLabel:"Inre bild",borderColorLabel:"Kantfärg",borderWidthLabel:"Kanttjocklek",textColorLabel:"Textfärg",fontSizeLabel:"Teckenstorlek",weightLabel:"Tjocklek",italicLabel:"Kursiv",remove:"Ta bort",alertEnterName:"Ange ett namn.",alertNameExists:"Namnet finns redan.",alertCloseFirst:"Stäng kartan först.",alertDeleteConfirm:"Radera \"%s\" permanent?",alertDeleted:"\"%s\" raderad.",alertAllDeleted:"All data raderad från din dator.",alertSelectImage:"Välj en bild.",alertImageSize:"Bild ≤ 1 MB.",alertSelectTwo:"Välj exakt två noder.",alertSaved:"Sparad.",alertNameTaken:"Namnet är upptaget.",editing:"Redigerar"}
+    };
+    let currentLang = 'en';
+    function t(key, ...args) {
+      let str = translations[currentLang][key] || translations.en[key] || key;
+      return args.length ? str.replace(/%s/g, () => args.shift()) : str;
+    }
+    function applyTranslations() {
+      document.querySelectorAll('[data-t]').forEach(el => {
+        const key = el.getAttribute('data-t');
+        if (el.hasAttribute('data-t-placeholder')) el.placeholder = t(el.getAttribute('data-t-placeholder'));
+        else el.textContent = t(key);
+      });
+      if (currentMapName) document.getElementById('editor-title').textContent = `${t('editing')}: ${currentMapName}`;
+      updateLangButton();
+    }
+    function updateLangButton() {
+      const btn = document.getElementById('lang-btn');
+      const flag = currentLang === 'en' ? '🇬🇧' : '🇸🇪';
+      const text = currentLang === 'en' ? 'English' : 'Svenska';
+      btn.innerHTML = `<span class="flag">${flag}</span> <span class="lang-text">${text}</span>`;
+    }
+    document.getElementById('lang-btn').addEventListener('click', () => {
+      currentLang = currentLang === 'en' ? 'sv' : 'en';
+      applyTranslations();
+    });
+
+    /* ==================== IndexedDB + URL Cache ==================== */
+    const DB_NAME = 'MindMapDB', STORE_MAPS = 'maps', STORE_IMAGES = 'images';
+    let db = null, currentMapName = null, cy = null, selectedNodeIds = [], nodeCounter = 0, contextNode = null;
+    const imageUrlCache = new Map();
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 4);               // <-- Bumped to version 4 (forces fresh DB)
+        req.onupgradeneeded = e => {
+          const d = e.target.result;
+          [STORE_MAPS, STORE_IMAGES].forEach(s => {
+            if (d.objectStoreNames.contains(s)) d.deleteObjectStore(s);
+            d.createObjectStore(s);
+          });
+        };
+        req.onsuccess = e => { db = e.target.result; resolve(); };
+        req.onerror = e => reject(e.target.error);
+      });
+    }
+
+    async function getMap(name) { const tx = db.transaction(STORE_MAPS); const req = tx.objectStore(STORE_MAPS).get(name); return new Promise(res => req.onsuccess = () => res(req.result)); }
+    async function putMap(name, data) { const tx = db.transaction(STORE_MAPS, 'readwrite'); tx.objectStore(STORE_MAPS).put(data, name); return new Promise(res => tx.oncomplete = res); }
+    async function deleteMap(name) { const tx = db.transaction(STORE_MAPS, 'readwrite'); tx.objectStore(STORE_MAPS).delete(name); return new Promise(res => tx.oncomplete = res); }
+    async function clearAllMaps() { const tx = db.transaction([STORE_MAPS, STORE_IMAGES], 'readwrite'); tx.objectStore(STORE_MAPS).clear(); tx.objectStore(STORE_IMAGES).clear(); imageUrlCache.clear(); return new Promise(res => tx.oncomplete = res); }
+    async function listMaps() { const tx = db.transaction(STORE_MAPS); const req = tx.objectStore(STORE_MAPS).getAllKeys(); return new Promise(res => req.onsuccess = () => res(req.result)); }
+    async function storeImageBlob(id, blob) { const tx = db.transaction(STORE_IMAGES, 'readwrite'); tx.objectStore(STORE_IMAGES).put(blob, id); return new Promise(res => tx.oncomplete = res); }
+    async function getImageBlob(id) { const tx = db.transaction(STORE_IMAGES); const req = tx.objectStore(STORE_IMAGES).get(id); return new Promise(res => req.onsuccess = () => res(req.result)); }
+    async function getImageUrl(blobId) {
+      if (imageUrlCache.has(blobId)) return imageUrlCache.get(blobId);
+      const blob = await getImageBlob(blobId);
+      if (!blob) return null;
+      const url = URL.createObjectURL(blob);
+      imageUrlCache.set(blobId, url);
+      return url;
+    }
+
+    /* ==================== Init ==================== */
+    async function initApp() {
+      await openDB();
+      document.getElementById('init-msg').textContent = 'Ready!';
+      setTimeout(() => {
+        document.getElementById('init-msg').classList.add('hidden');
+        document.getElementById('controls').classList.remove('hidden');
+        document.getElementById('clear-all-btn').classList.remove('hidden');
+        document.getElementById('create-new-btn').disabled = false;
+        document.getElementById('clear-all-btn').disabled = false;
+        applyTranslations();
+        loadMapList();
+      }, 500);
+    }
+
+    /* ==================== Map List ==================== */
+    async function loadMapList() {
+      const keys = await listMaps();
+      const ul = document.getElementById('map-list'); ul.innerHTML = '';
+      if (!keys.length) ul.innerHTML = '<li style="text-align:center;color:#999;">No maps yet – create one!</li>';
+      else keys.sort().forEach(name => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${name}</span><div><button class="open-btn">Open</button><button class="delete-btn">Delete</button></div>`;
+        ul.appendChild(li);
+        li.querySelector('.open-btn').onclick = () => openMindMap(name);
+        li.querySelector('.delete-btn').onclick = () => deleteMindMap(name);
+      });
+    }
+    async function deleteMindMap(name) {
+      if (name === currentMapName) return alert(t('alertCloseFirst'));
+      if (!confirm(t('alertDeleteConfirm', name))) return;
+      await deleteMap(name);
+      loadMapList();
+      alert(t('alertDeleted', name));
+    }
+    document.getElementById('clear-all-btn').onclick = async () => {
+      if (!confirm('Delete **EVERYTHING**?')) return;
+      await clearAllMaps();
+      loadMapList();
+      alert(t('alertAllDeleted'));
+    };
+
+    /* ==================== Create / Open ==================== */
+    document.getElementById('create-new-btn').onclick = async () => {
+      const name = document.getElementById('new-map-name').value.trim();
+      if (!name) return alert(t('alertEnterName'));
+      if (await getMap(name)) return alert(t('alertNameExists'));
+      currentMapName = name; selectedNodeIds = [];
+      showEditor();
+      const id = 'node' + Date.now();
+      cy.add({group:'nodes', data:{id, label:'New idea', text:'', shape:'rectangle', color:'#87ceeb', borderColor:'#87ceeb', borderWidth:2, textColor:'#fff', fontSize:'12', fontWeight:'normal', fontStyle:'normal', width:120, height:80, image:null, events:'yes'}, position:{x:0,y:0}});
+      cy.fit();
+      document.getElementById('editor-title').textContent = `${t('editing')}: ${name}`;
+      document.getElementById('new-map-name').value = '';
+    };
+
+    async function openMindMap(name) {
+      const raw = await getMap(name);
+      if (!raw) return alert('Map not found.');
+      currentMapName = name; selectedNodeIds = []; showEditor();
+      const elements = JSON.parse(raw.json);
+      for (const el of elements) {
+        if (el.group === 'nodes' && el.data.image) {
+          el.data.image = await getImageUrl(el.data.image);
+        }
+      }
+      cy.json({elements});
+      cy.nodes().forEach(n => n.ungrabify().grabify().unlock());
+      cy.fit();
+      document.getElementById('editor-title').textContent = `${t('editing')}: ${name}`;
+    }
+
+    /* ==================== Editor ==================== */
+    function showEditor() {
+      document.getElementById('starter-page').classList.add('hidden');
+      document.getElementById('editor-page').classList.remove('hidden');
+      initNetwork();
+    }
+    function backToStarter() {
+      document.getElementById('editor-page').classList.add('hidden');
+      document.getElementById('starter-page').classList.remove('hidden');
+      currentMapName = null; selectedNodeIds = []; updateConnectSection();
+      if (cy) cy.destroy(); cy = null;
+      loadMapList();
+    }
+
+    function initNetwork() {
+      const container = document.getElementById('mindmap');
+      cy = cytoscape({
+        container,
+        style: [
+          {selector:'node',style:{'label':'data(label)','shape':'data(shape)','background-color':'data(color)','background-image':'data(image)','background-fit':'contain','background-image-opacity':e=>e.data('image')?1:0,'border-color':'data(borderColor)','border-width':'data(borderWidth)','color':'data(textColor)','text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':'data(width)','font-family':'Segoe UI, sans-serif','font-size':'data(fontSize)','font-weight':'data(fontWeight)','font-style':e=>e.data('fontStyle')==='italic'?'italic':'normal','padding':'15px','width':'data(width)','height':'data(height)','box-shadow':'2px 2px 5px rgba(0,0,0,0.2)','overlay-opacity':0,'events':'yes','content':e=>{const l=e.data('label')||'',t=e.data('text')||'';return t?`${l}\n${t}`:l;}}},
+          {selector:'edge',style:{'width':2,'line-color':'data(edgeColor,#87ceeb)','target-arrow-color':'data(edgeColor,#87ceeb)','target-arrow-shape':'triangle','curve-style':'bezier'}}
+        ],
+        layout:{name:'preset'}, userPanningEnabled:true, userZoomingEnabled:true, boxSelectionEnabled:false
+      });
+      window.addEventListener('resize', () => cy.fit(cy.elements(), 50));
+      setTimeout(() => cy.fit(cy.elements(), 50), 100);
+
+      cy.on('cxttap', 'node', e => {
+        contextNode = e.target;
+        const menu = document.getElementById('context-menu');
+        const pos = e.renderedPosition;
+        menu.style.left = (pos.x + container.offsetLeft) + 'px';
+        menu.style.top = (pos.y + container.offsetTop) + 'px';
+        menu.classList.remove('hidden');
+      });
+      cy.on('tap', e => { if (e.target === cy) document.getElementById('context-menu').classList.add('hidden'); });
+      document.addEventListener('click', e => {
+        const menu = document.getElementById('context-menu');
+        if (!menu.contains(e.target)) menu.classList.add('hidden');
+      });
+
+      cy.on('tap', 'node', e => {
+        const id = e.target.id();
+        if (!selectedNodeIds.includes(id)) selectedNodeIds.push(id);
+        if (selectedNodeIds.length > 2) selectedNodeIds.shift();
+        updateConnectSection();
+      });
+    }
+
+    function updateConnectSection() {
+      const sec = document.getElementById('connect-section'), span = document.getElementById('selected-nodes');
+      if (!selectedNodeIds.length) { sec.classList.add('hidden'); span.textContent = ''; return; }
+      sec.classList.remove('hidden');
+      span.textContent = 'Selected: ' + selectedNodeIds.map(id => cy.getElementById(id).data('label') || '(untitled)').join(' → ');
+    }
+    function connectNodes() {
+      if (selectedNodeIds.length !== 2) return alert(t('alertSelectTwo'));
+      const [from, to] = selectedNodeIds;
+      cy.add({group:'edges', data:{source:from, target:to, edgeColor:cy.getElementById(from).data('borderColor')||'#87ceeb'}});
+      selectedNodeIds = []; updateConnectSection(); cy.fit();
+    }
+
+    /* ==================== Add Node with Image ==================== */
+    function showShapeModal() {
+      document.getElementById('modal-node-title').value = '';
+      document.getElementById('modal-node-text').value = '';
+      document.getElementById('modal-node-image').value = '';
+      document.getElementById('shape-modal').classList.remove('hidden');
+    }
+    function triggerImageUpload() { document.getElementById('modal-node-image').click(); }
+
+    async function addNode(shape) {
+      const title = document.getElementById('modal-node-title').value.trim() || '';
+      const text = document.getElementById('modal-node-text').value.trim();
+      const isImg = shape === 'image', finalShape = isImg ? 'rectangle' : shape;
+      const id = 'node' + Date.now(), col = document.getElementById('node-color').value;
+      const pos = {x: 50 + (nodeCounter++ * 10 % 100), y: 50 + (nodeCounter * 10 % 100)};
+      const file = document.getElementById('modal-node-image').files[0];
+      if (isImg && !file) return alert(t('alertSelectImage'));
+      if (file && file.size > 1024*1024) return alert(t('alertImageSize'));
+
+      const nodeData = {id, label:title, text, shape:finalShape, color:col, borderColor:'#87ceeb', borderWidth:2,
+                       textColor:'#fff', fontSize:'12', fontWeight:'normal', fontStyle:'normal',
+                       width:isImg?0:120, height:isImg?0:80, image:null, events:'yes'};
+
+      if (file) {
+        const blobId = id + '_img';
+        await storeImageBlob(blobId, file);
+        const url = URL.createObjectURL(file);
+        imageUrlCache.set(blobId, url);
+
+        const img = new Image(); img.onload = () => {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > 300 || h > 300) { const s = Math.min(300/w, 300/h); w = Math.round(w*s); h = Math.round(h*s); }
+          w = Math.max(50, w); h = Math.max(50, h);
+          nodeData.width = w; nodeData.height = h; nodeData.image = url;
+          const n = cy.add({group:'nodes', data:nodeData, position:pos});
+          n.ungrabify().grabify().unlock();
+          document.getElementById('shape-modal').classList.add('hidden');
+          cy.fit();
+        };
+        img.src = url;
+      } else {
+        const n = cy.add({group:'nodes', data:nodeData, position:pos});
+        n.ungrabify().grabify().unlock();
+        document.getElementById('shape-modal').classList.add('hidden');
+        cy.fit();
+      }
+    }
+
+    /* ==================== Edit Node ==================== */
+    function openNodeEditor() {
+      if (!contextNode) return;
+      const d = contextNode.data();
+      document.getElementById('editor-node-title').value = d.label || '';
+      document.getElementById('editor-node-text').value = d.text || '';
+      document.getElementById('editor-node-width').value = d.width || 120;
+      document.getElementById('editor-node-height').value = d.height || 80;
+      document.getElementById('editor-node-color').value = d.color || '#87ceeb';
+      document.getElementById('editor-border-color').value = d.borderColor || '#87ceeb';
+      document.getElementById('editor-border-width').value = d.borderWidth || 2;
+      document.getElementById('editor-text-color').value = d.textColor || '#fff';
+      document.getElementById('editor-font-size').value = d.fontSize?.replace('px','') || '12';
+      document.getElementById('editor-font-weight').value = d.fontWeight || 'normal';
+      document.getElementById('editor-font-italic').checked = d.fontStyle === 'italic';
+      document.getElementById('context-menu').classList.add('hidden');
+      document.getElementById('editor-modal').classList.remove('hidden');
+    }
+
+    function removeNodeImage() {
+      if (contextNode && contextNode.data('image')) {
+        const oldUrl = contextNode.data('image');
+        URL.revokeObjectURL(oldUrl);
+        contextNode.data('image', null);
+      }
+    }
+
+    async function saveNodeEdits() {
+      if (!contextNode) return;
+      const d = contextNode.data();
+      d.label = document.getElementById('editor-node-title').value.trim();
+      d.text = document.getElementById('editor-node-text').value.trim();
+      d.width = parseInt(document.getElementById('editor-node-width').value) || 120;
+      d.height = parseInt(document.getElementById('editor-node-height').value) || 80;
+      d.color = document.getElementById('editor-node-color').value;
+      d.borderColor = document.getElementById('editor-border-color').value;
+      d.borderWidth = parseInt(document.getElementById('editor-border-width').value);
+      d.textColor = document.getElementById('editor-text-color').value;
+      d.fontSize = document.getElementById('editor-font-size').value + 'px';
+      d.fontWeight = document.getElementById('editor-font-weight').value;
+      d.fontStyle = document.getElementById('editor-font-italic').checked ? 'italic' : 'normal';
+
+      const file = document.getElementById('editor-node-image').files[0];
+      if (file) {
+        if (file.size > 1024*1024) return alert(t('alertImageSize'));
+        const blobId = d.id + '_img';
+        await storeImageBlob(blobId, file);
+        const url = URL.createObjectURL(file);
+        imageUrlCache.set(blobId, url);
+        if (d.image) URL.revokeObjectURL(d.image);
+        d.image = url;
+
+        const img = new Image(); img.onload = () => {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > 300 || h > 300) { const s = Math.min(300/w, 300/h); w = Math.round(w*s); h = Math.round(h*s); }
+          d.width = Math.max(50, Math.round(w)); d.height = Math.max(50, Math.round(h));
+          contextNode.data(d);
+          cy.fit();
+        };
+        img.src = url;
+      } else {
+        contextNode.data(d);
+      }
+
+      document.getElementById('editor-modal').classList.add('hidden');
+      cy.fit();
+    }
+
+    /* ==================== Save to IndexedDB ==================== */
+    async function saveMindMap() {
+      if (!currentMapName) { const name = prompt(t('saveAs') + ':'); if (!name) return; currentMapName = name; document.getElementById('editor-title').textContent = `${t('editing')}: ${name}`; }
+      const elements = cy.json().elements;
+      const saveElements = JSON.parse(JSON.stringify(elements));
+      for (const el of saveElements) {
+        if (el.group === 'nodes' && el.data.image) {
+          const url = el.data.image;
+          const blobId = Array.from(imageUrlCache.entries()).find(([k,v]) => v === url)?.[0];
+          el.data.image = blobId || null;
+        }
+      }
+      await putMap(currentMapName, {json: JSON.stringify(saveElements)});
+      alert(t('alertSaved'));
+      loadMapList();
+    }
+
+    /* ==================== Export Functions ==================== */
+    function exportToJSON() {
+      const elements = cy.json().elements;
+      const exportData = { name: currentMapName || "Untitled", elements };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${currentMapName || "mindmap"}.json`; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportToPNG() {
+      const png = cy.png({full: true, scale: 2, bg: 'white'});
+      const a = document.createElement('a'); a.href = png; a.download = `${currentMapName || "mindmap"}.png`; a.click();
+    }
+
+    initApp();
+  </script>
+</body>
+</html>
