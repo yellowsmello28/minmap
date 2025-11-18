@@ -75,7 +75,6 @@
       <div class="dropdown">
         <button data-t="export">Export ▼</button>
         <div class="dropdown-content">
-          <button onclick="exportToJSON()">Save to Computer (JSON)</button>
           <button onclick="exportToPNG()">Export as PNG</button>
         </div>
       </div>
@@ -475,12 +474,7 @@
     }
 
     /* ==================== Export Functions ==================== */
-    function exportToJSON() {
-      const elements = cy.json().elements;
       const exportData = { name: currentMapName || "Untitled", elements };
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `${currentMapName || "mindmap"}.json`; a.click();
       URL.revokeObjectURL(url);
     }
 
