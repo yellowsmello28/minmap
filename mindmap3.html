@@ -72,13 +72,7 @@
       <input id="node-color" type="color" value="#87ceeb">
       <button onclick="showShapeModal()" data-t="addNode">Add Node</button>
       <button onclick="saveMindMap()" data-t="save">Save</button>
-      <div class="dropdown">
-        <button data-t="export">Export ▼</button>
-        <div class="dropdown-content">
-          <button onclick="exportToJSON()">Save to Computer (JSON)</button>
-          <button onclick="exportToPNG()">Export as PNG</button>
-        </div>
-      </div>
+      <button onclick="exportToPNG()" data-t="bild">Download Mindmap</button>
       <button onclick="backToStarter()" data-t="back">Back</button>
     </div>
     <p class="info-text" data-t="infoText">Right-click → edit. Double-click for quick edit. Click two nodes → Connect. Drag to move.</p>
